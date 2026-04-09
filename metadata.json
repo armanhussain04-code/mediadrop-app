@@ -1,0 +1,8 @@
+{
+  "name": "MediaDrop",
+  "description": "A real-time image and video sharing application with an immersive media experience.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

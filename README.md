@@ -1,11 +1,35 @@
-<div align="center">
+# MediaDrop - Live Video Call & File Sharing
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+MediaDrop ek modern web application hai jisme aap 6-digit code ke zariye rooms join kar sakte hain, badi files (500MB tak) share kar sakte hain aur live video calls kar sakte hain.
 
-  <h1>Built with AI Studio</h2>
+## Features
+- **Live Video Call**: WebRTC ke zariye high-quality video aur audio calls.
+- **File Sharing**: Photos aur Videos share karein (Max 500MB).
+- **Real-time Sync**: Socket.io ke zariye bina refresh kiye data receive karein.
+- **Online Users**: Room mein kaun-kaun maujood hai, ye live dekhein.
+- **Secure**: 6-digit unique room codes.
+- **Responsive**: Mobile aur Desktop dono par perfect chalta hai.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Tech Stack
+- **Frontend**: React.js, Tailwind CSS, Lucide Icons, Framer Motion.
+- **Backend**: Node.js, Express, Socket.io (Signaling).
+- **Media Handling**: Multer (File Uploads).
+- **Real-time**: WebRTC (P2P Video/Audio).
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## How to Run Locally
+1. Clone the repository:
+   ```bash
+   git clone <your-repo-url>
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+4. Open `http://localhost:3000` in your browser.
 
-</div>
+## Deployment Note
+Is app ko host karne ke liye aapko ek Node.js environment chahiye hoga (jaise Render, Heroku, ya VPS). GitHub Pages sirf static HTML support karta hai, isliye wahan video calls aur uploads kaam nahi karenge.
