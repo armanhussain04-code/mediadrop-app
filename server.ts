@@ -5,15 +5,15 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import cors from "cors";
-import { createServer as createViteServer } from "vite";
 
 const app = express();
 const httpServer = createServer(app);
 
-// 1. CORS Setup
+// 1. CORS Setup - Sabhi origins allow kiye taaki Netlify/Frontend se connection na tute
 app.use(cors({
   origin: "*",
-  methods: ["GET", "POST", "DELETE"]
+  methods: ["GET", "POST", "DELETE"],
+  credentials: true
 }));
 
 const io = new Server(httpServer, {
@@ -31,7 +31,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Multer config
+// Multer config for file storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "public/uploads");
@@ -44,105 +44,117 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 } 
+  limits: { fileSize: 500 * 1024 * 1024 } // 500MB limit
 });
 
 app.use(express.json());
-// Files ko access karne ke liye static path
 app.use("/uploads", express.static(uploadsDir));
 
+// Online users tracking
 const roomUsers: { [roomId: string]: { [socketId: string]: string } } = {};
 
-// --- API Routes (Photo/Video Upload) ---
-app.post("/api/upload", (req, res) => {
-  upload.single("file")(req, res, (err) => {
-    if (err) return res.status(500).json({ error: "Upload failed" });
-    if (!req.file) return res.status(400).json({ error: "No file" });
+// --- API ROUTES ---
 
-    const roomId = req.body.roomId;
-    const senderName = req.body.senderName || "Anonymous";
+// Photo/Video Upload API
+app.post("/api/upload", upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    // Hostname detection for Render
-    const host = req.get('host');
-    const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const { roomId, senderName } = req.body;
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.get('host');
 
-    const fileData = {
-      id: Date.now().toString(),
-      url: `${protocol}://${host}/uploads/${req.file.filename}`, 
-      type: req.file.mimetype.startsWith("image") ? "image" : "video",
-      name: req.file.originalname,
-      sender: senderName,
-      timestamp: new Date().toISOString(),
-    };
+  const fileData = {
+    id: Date.now().toString(),
+    url: `${protocol}://${host}/uploads/${req.file.filename}`, 
+    type: req.file.mimetype.startsWith("image") ? "image" : "video",
+    name: req.file.originalname,
+    sender: senderName || "Anonymous",
+    timestamp: new Date().toISOString(),
+  };
 
-    io.to(roomId).emit("new-media", fileData);
-    res.json(fileData);
-  });
+  // Sabhi ko batana ki nayi file aayi hai
+  io.to(roomId).emit("new-media", fileData);
+  res.json(fileData);
 });
 
+// Delete Media API
 app.delete("/api/media/:roomId/:id", (req, res) => {
   const { roomId, id } = req.params;
   io.to(roomId).emit("media-deleted", id);
   res.json({ success: true });
 });
 
-// --- Socket Logic (Video Call + Real-time) ---
+// Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "running", port: PORT });
+});
+
+// --- SOCKET.IO LOGIC ---
+
 io.on("connection", (socket) => {
-  socket.on("join-room", (data: any) => {
-    const roomId = typeof data === 'string' ? data : data.roomId;
-    const userName = typeof data === 'string' ? 'Anonymous' : data.userName;
+  console.log("Connected:", socket.id);
+
+  socket.on("join-room", (data) => {
+    const { roomId, userName } = data;
     socket.join(roomId);
+
+    // Room members update
     if (!roomUsers[roomId]) roomUsers[roomId] = {};
     roomUsers[roomId][socket.id] = userName;
+
+    // 1. Notification: Sabko batana ki naya banda aaya hai
+    socket.to(roomId).emit("user-joined", userName);
+
+    // 2. Update Online List: Sabko nayi list bhejna
     io.to(roomId).emit("room-users", Object.values(roomUsers[roomId]));
+    
+    console.log(`${userName} joined ${roomId}`);
   });
 
-  // Video Call Signaling
+  // --- VIDEO CALL SIGNALLING ---
+
   socket.on("video-offer", (data) => {
-    socket.to(data.roomId).emit("video-offer", { offer: data.offer, sender: data.sender });
+    // Caller se Receiver ko data bhejna
+    socket.to(data.roomId).emit("video-offer", {
+      offer: data.offer,
+      sender: data.sender
+    });
   });
 
   socket.on("video-answer", (data) => {
-    socket.to(data.roomId).emit("video-answer", { answer: data.answer });
+    // Receiver se Caller ko response bhejna
+    socket.to(data.roomId).emit("video-answer", {
+      answer: data.answer
+    });
   });
 
   socket.on("new-ice-candidate", (data) => {
-    socket.to(data.roomId).emit("new-ice-candidate", { candidate: data.candidate });
+    // Network path connection setup karna
+    socket.to(data.roomId).emit("new-ice-candidate", {
+      candidate: data.candidate
+    });
   });
 
   socket.on("end-call", (roomId) => {
-    socket.to(roomId).emit("end-call");
+    io.to(roomId).emit("end-call");
   });
 
+  // Disconnect handle karna
   socket.on("disconnect", () => {
     for (const roomId in roomUsers) {
       if (roomUsers[roomId][socket.id]) {
+        const name = roomUsers[roomId][socket.id];
         delete roomUsers[roomId][socket.id];
+        
+        // List update karna aur notification dena (optional)
         io.to(roomId).emit("room-users", Object.values(roomUsers[roomId]));
+        console.log(`${name} left`);
       }
     }
   });
 });
 
-// --- Vite / Production Setup ---
-async function startServer() {
-  if (process.env.NODE_ENV !== "production" && !process.env.RENDER) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
-      app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
-    }
-  }
-
-  httpServer.listen(Number(PORT), "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
-
-startServer();
+// 5. Start Server
+httpServer.listen(Number(PORT), "0.0.0.0", () => {
+  console.log(`Server is live on port ${PORT}`);
+});
