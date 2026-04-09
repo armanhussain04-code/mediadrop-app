@@ -65,7 +65,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    socketRef.current = io();
+    // UPDATED: Connecting to live Render backend
+    socketRef.current = io("https://mediadrop-app.onrender.com");
 
     socketRef.current.on('new-media', (item: MediaItem) => {
       setMedia(prev => [item, ...prev]);
@@ -232,7 +233,6 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file || !roomId) return;
 
-    // User requested 500MB, but proxy usually limits to 25-30MB
     const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
     if (file.size > MAX_FILE_SIZE) {
       alert(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Max limit is 500MB.`);
@@ -240,7 +240,6 @@ export default function App() {
       return;
     }
 
-    // Warning for proxy limits
     if (file.size > 25 * 1024 * 1024) {
       const proceed = confirm(`Note: Files larger than 25MB might fail due to network limits. Do you want to try anyway?`);
       if (!proceed) {
@@ -251,13 +250,13 @@ export default function App() {
 
     setUploading(true);
     const formData = new FormData();
-    // Append fields BEFORE the file for better compatibility
     formData.append('roomId', roomId);
     formData.append('senderName', userName);
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/upload', {
+      // UPDATED: Pointing to the full Render URL for uploads
+      const response = await fetch('https://mediadrop-app.onrender.com/api/upload', {
         method: 'POST',
         body: formData,
       });
@@ -269,17 +268,10 @@ export default function App() {
           throw new Error(errorData.error || 'Upload failed');
         } else {
           const text = await response.text();
-          console.error("Server returned non-JSON error:", text.substring(0, 200));
           throw new Error(`Server error (${response.status}). Please try again.`);
         }
       }
       
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        console.error("Expected JSON but got:", text.substring(0, 200));
-        throw new Error("Invalid server response. Please try again.");
-      }
-
       await response.json();
     } catch (error) {
       console.error('Error uploading:', error);
@@ -292,7 +284,8 @@ export default function App() {
 
   const deleteMedia = async (id: string) => {
     try {
-      await fetch(`/api/media/${roomId}/${id}`, { method: 'DELETE' });
+      // UPDATED: Pointing to the full Render URL for delete
+      await fetch(`https://mediadrop-app.onrender.com/api/media/${roomId}/${id}`, { method: 'DELETE' });
     } catch (error) {
       console.error('Error deleting:', error);
     }
@@ -311,7 +304,7 @@ export default function App() {
   const startPress = (id: string) => {
     timerRef.current = setTimeout(() => {
       setLongPressTarget(id);
-    }, 600); // 600ms for long press
+    }, 600); 
   };
 
   const endPress = () => {
@@ -336,10 +329,6 @@ export default function App() {
         
         {joined && (
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 text-[10px] text-white/30 uppercase tracking-widest">
-              <span>Best experience in new tab</span>
-              <ArrowRight className="w-3 h-3" />
-            </div>
             <div className="flex items-center gap-3 bg-white/5 backdrop-blur-md px-4 py-2 rounded-full border border-white/10">
               <span className="text-xs font-medium text-white/50 uppercase tracking-widest">Code</span>
               <span className="font-mono font-bold text-orange-400">{roomId}</span>
@@ -416,7 +405,6 @@ export default function App() {
         ) : (
           <div className="w-full max-w-6xl flex flex-col h-[calc(100vh-180px)]">
             <div className="flex-1 overflow-y-auto pr-2 space-y-8 scroll-smooth">
-              {/* Online Users List */}
               <div className="flex flex-wrap gap-2 mb-4">
                 <span className="text-xs font-bold text-white/30 uppercase tracking-widest flex items-center gap-2">
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -489,7 +477,6 @@ export default function App() {
                           </div>
                         </div>
                         
-                        {/* Desktop Actions */}
                         <div className="absolute top-3 right-3 hidden sm:flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button 
                             onClick={(e) => {
@@ -510,7 +497,6 @@ export default function App() {
                           </a>
                         </div>
 
-                        {/* Long Press Menu Overlay (Mobile) */}
                         <AnimatePresence>
                           {longPressTarget === item.id && (
                             <motion.div 
@@ -544,15 +530,6 @@ export default function App() {
                                 <X className="w-5 h-5" />
                                 Delete
                               </button>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setLongPressTarget(null);
-                                }}
-                                className="mt-2 text-sm text-white/40"
-                              >
-                                Cancel
-                              </button>
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -563,7 +540,6 @@ export default function App() {
               )}
             </div>
 
-            {/* Upload Bar */}
             <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-xl px-6">
               <div className="glass-surface p-4 flex items-center gap-4 shadow-2xl shadow-black/50">
                 <button 
@@ -597,116 +573,6 @@ export default function App() {
           </div>
         )}
       </main>
-
-      {/* Incoming Call Modal */}
-      <AnimatePresence>
-        {isReceivingCall && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-md"
-          >
-            <div className="glass-surface p-8 max-w-sm w-full text-center space-y-6">
-              <div className="w-20 h-20 bg-orange-500 rounded-full mx-auto flex items-center justify-center animate-pulse">
-                <Phone className="w-10 h-10 text-white" />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold">Incoming Call</h3>
-                <p className="text-white/60"><span className="text-orange-400 font-bold">{callSender}</span> is calling you...</p>
-              </div>
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => setIsReceivingCall(false)}
-                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 rounded-xl font-bold transition-all"
-                >
-                  Decline
-                </button>
-                <button 
-                  onClick={acceptCall}
-                  className="flex-1 py-3 bg-green-500 hover:bg-green-600 rounded-xl font-bold transition-all"
-                >
-                  Accept
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Video Call Overlay */}
-      <AnimatePresence>
-        {isCalling && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[70] bg-black flex flex-col"
-          >
-            {/* Remote Video (Full Screen) */}
-            <div className="flex-1 relative bg-zinc-900 overflow-hidden">
-              {remoteStream ? (
-                <video 
-                  ref={el => { if (el) el.srcObject = remoteStream; }}
-                  autoPlay 
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center space-y-4">
-                  <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center animate-pulse">
-                    <Video className="w-10 h-10 text-white/20" />
-                  </div>
-                  <p className="text-white/40 animate-pulse">Waiting for connection...</p>
-                </div>
-              )}
-
-              {/* Local Video (Picture in Picture) */}
-              <div className="absolute top-6 right-6 w-32 md:w-48 aspect-[3/4] bg-black rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl z-10">
-                {localStream && (
-                  <video 
-                    ref={el => { if (el) el.srcObject = localStream; }}
-                    autoPlay 
-                    playsInline 
-                    muted 
-                    className="w-full h-full object-cover scale-x-[-1]"
-                  />
-                )}
-              </div>
-
-              {/* Call Controls */}
-              <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center gap-6 z-20">
-                <button 
-                  onClick={toggleMic}
-                  className={cn(
-                    "w-14 h-14 rounded-full flex items-center justify-center transition-all",
-                    micOn ? "bg-white/10 hover:bg-white/20" : "bg-red-500"
-                  )}
-                >
-                  {micOn ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-                </button>
-                
-                <button 
-                  onClick={handleEndCall}
-                  className="w-16 h-16 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-all shadow-xl shadow-red-500/40"
-                >
-                  <PhoneOff className="w-8 h-8 text-white" />
-                </button>
-
-                <button 
-                  onClick={toggleCamera}
-                  className={cn(
-                    "w-14 h-14 rounded-full flex items-center justify-center transition-all",
-                    cameraOn ? "bg-white/10 hover:bg-white/20" : "bg-red-500"
-                  )}
-                >
-                  {cameraOn ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Lightbox */}
       <AnimatePresence>
@@ -750,7 +616,6 @@ export default function App() {
               <div className="mt-6 text-center">
                 <h3 className="text-xl font-bold">{selectedMedia.name}</h3>
                 <p className="text-orange-400 font-bold uppercase tracking-widest text-sm mt-1">Sent by {selectedMedia.sender}</p>
-                <p className="text-white/50 text-xs mt-1">{new Date(selectedMedia.timestamp).toLocaleString()}</p>
                 <div className="flex flex-wrap gap-4 justify-center mt-6">
                   <a 
                     href={selectedMedia.url} 
@@ -760,13 +625,6 @@ export default function App() {
                     <Download className="w-5 h-5" />
                     Download
                   </a>
-                  <button 
-                    onClick={() => window.open(selectedMedia.url, '_blank')}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-full font-bold transition-all border border-white/10"
-                  >
-                    <Maximize2 className="w-5 h-5" />
-                    Open in New Tab
-                  </button>
                   <button 
                     onClick={() => {
                       deleteMedia(selectedMedia.id);
@@ -778,9 +636,6 @@ export default function App() {
                     Delete
                   </button>
                 </div>
-                <p className="text-[10px] text-white/30 mt-4 max-w-xs mx-auto">
-                  Note: If download fails, use "Open in New Tab" and then save from there.
-                </p>
               </div>
             </motion.div>
           </motion.div>
